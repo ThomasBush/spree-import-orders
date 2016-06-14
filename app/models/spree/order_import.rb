@@ -1,4 +1,5 @@
 require 'csv'
+require 'json'
 
 module Spree
   class OrderError < StandardError; end;
@@ -75,8 +76,7 @@ module Spree
           order_information = assign_col_row_mapping(row, col)
           order_information = validate_and_sanitize(order_information)
           next if @numbers_of_orders_before_import.include?(order_information[:order_id])
-          next unless Spree::Variant.find_by_sku(order_information[:sku])
-
+          # next unless Spree::Variant.find_by_sku(order_information[:sku])
           order_data = get_order_hash(order_information)
           order_data[:bill_address_attributes] = get_address_hash(order_information, 'bill')
           order_data[:ship_address_attributes] = get_address_hash(order_information, 'ship')
@@ -169,11 +169,9 @@ module Spree
           completed_at: order_information[:completed_at],
           currency: order_information[:currency],
           channel: order_information[:channel],
-          line_items_attributes: [
-            {sku: order_information[:sku], quantity: order_information[:quantity], price: order_information[:price], currency: order_information[:currency]}
-          ],
+          line_items_attributes: create_params_hash_from_json(order_information[:line_items]),
           payments_attributes: [
-            { amount: order_information[:price], payment_method: order_information[:payment_method], state: order_information[:payment_state], created_at: order_information[:payment_created_at]}
+            { amount: order_information[:grand_total], payment_method: order_information[:payment_method], state: order_information[:payment_state], created_at: order_information[:payment_created_at]}
           ],
           adjustments_attributes: [
             {amount: order_information[:adjustment_amount], label: order_information[:adjustment_label]}
@@ -184,9 +182,7 @@ module Spree
             shipped_at: order_information[:shipped_at],
             shipping_method: order_information[:shipping_method] || 'default',
             cost: order_information[:shipping_cost],
-            inventory_units: [
-              { sku: order_information[:sku] }
-            ]
+            inventory_units: create_params_hash_from_json(order_information[:inventory_items]),
           }]
         }
       end
@@ -216,6 +212,10 @@ module Spree
         # this method can be overiden to include custom logic
         # eg. order.shipments.first.update(tracking: order_information[:tracking])
         order.cancel if order_information[:status] == "canceled"
+      end
+
+      def create_params_hash_from_json array_of_line_items
+        JSON.parse(array_of_line_items).each {|h| h.symbolize_keys!}
       end
 
   end
